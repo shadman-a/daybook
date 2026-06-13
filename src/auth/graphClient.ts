@@ -20,6 +20,12 @@ export function createGraphClient(instance: IPublicClientApplication, account: A
   });
 }
 
+export function createGraphClientWithAccessToken(accessToken: string) {
+  return Client.init({
+    authProvider: (done) => done(null, accessToken)
+  });
+}
+
 function toError(popupError: unknown, silentError: unknown): Error {
   if (popupError instanceof Error) return popupError;
   if (silentError instanceof Error) return silentError;

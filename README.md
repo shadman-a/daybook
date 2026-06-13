@@ -14,6 +14,16 @@ cp .env.example .env.local
 npm run dev
 ```
 
+## Use a Graph Explorer token
+
+If you cannot register an Entra application, copy the access token from Graph
+Explorer and paste it into Daybook's sign-in screen. Daybook keeps the token in
+memory only, so it is cleared on refresh and must be replaced when it expires.
+
+The token must include `Chat.Read` for the Teams timeline. Calendar, mail, and
+file context appears only when the token includes the corresponding delegated
+permissions.
+
 ## Entra app registration
 
 Create a SPA app registration with redirect URI:

@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { InteractionStatus } from "@azure/msal-browser";
 import { useMsal } from "@azure/msal-react";
-import { createGraphClient } from "./auth/graphClient";
-import { graphScopes } from "./auth/msalConfig";
+import { createGraphClient, createGraphClientWithAccessToken } from "./auth/graphClient";
+import { getManualTokenIdentity, isExpiredAccessToken, normalizeAccessToken } from "./auth/manualToken";
+import { graphScopes, hasMsalClientId } from "./auth/msalConfig";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { Timeline } from "./components/Timeline";
 import { getErrorMessage } from "./graph/errors";
@@ -24,11 +25,20 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [manualToken, setManualToken] = useState<string | null>(null);
   const requestId = useRef(0);
 
   const graph = useMemo(
-    () => account ? createGraphClient(instance, account) : null,
-    [instance, account]
+    () => manualToken
+      ? createGraphClientWithAccessToken(manualToken)
+      : account
+        ? createGraphClient(instance, account)
+        : null,
+    [instance, account, manualToken]
+  );
+  const manualIdentity = useMemo(
+    () => manualToken ? getManualTokenIdentity(manualToken) : null,
+    [manualToken]
   );
 
   const load = useCallback(async () => {
@@ -69,8 +79,34 @@ export default function App() {
     }
   }
 
+  function useAccessToken(value: string) {
+    const token = normalizeAccessToken(value);
+    setError(null);
+
+    if (!token) {
+      setError("Paste an access token from Graph Explorer.");
+      return;
+    }
+
+    if (isExpiredAccessToken(token)) {
+      setError("That Graph Explorer token has expired. Copy a new access token and try again.");
+      return;
+    }
+
+    setManualToken(token);
+  }
+
   async function signOut() {
     setError(null);
+    if (manualToken) {
+      requestId.current += 1;
+      setManualToken(null);
+      setData(null);
+      setSelected(undefined);
+      setLoading(false);
+      return;
+    }
+
     try {
       await instance.logoutPopup({ account });
     } catch (signOutError) {
@@ -82,19 +118,20 @@ export default function App() {
     setDate((current) => dayjs(current).add(days, "day").format("YYYY-MM-DD"));
   }
 
-  if (!import.meta.env.VITE_MS_CLIENT_ID) {
-    return <SetupScreen />;
-  }
-
-  if (!account) {
+  if (!account && !manualToken) {
     return (
       <SignInScreen
         error={error}
         busy={signingIn || inProgress !== InteractionStatus.None}
+        msalAvailable={hasMsalClientId}
         onSignIn={() => void signIn()}
+        onUseToken={useAccessToken}
       />
     );
   }
+
+  const displayName = account?.name || manualIdentity?.name || "Microsoft account";
+  const username = account?.username || manualIdentity?.username || "";
 
   const filteredItems = (data?.items ?? []).filter((item) => {
     if (filter === "Teams") return item.source === "Teams";
@@ -119,8 +156,8 @@ export default function App() {
           </div>
           <div className="account-menu">
             <div className="account-copy">
-              <strong>{account.name || "Microsoft account"}</strong>
-              <span>{account.username}</span>
+              <strong>{displayName}</strong>
+              <span>{username}</span>
             </div>
             <button className="icon-button" type="button" onClick={() => void signOut()} aria-label="Sign out">
               <span aria-hidden="true">↗</span>
@@ -229,21 +266,21 @@ function TimelineSkeleton() {
   );
 }
 
-function SetupScreen() {
-  return (
-    <main className="entry-screen">
-      <div className="entry-card setup-card">
-        <div className="brand-mark large" aria-hidden="true">D</div>
-        <span className="eyebrow">Configuration needed</span>
-        <h1>Connect Daybook to Microsoft 365</h1>
-        <p>Copy <code>.env.example</code> to <code>.env.local</code>, add your Entra SPA client ID, then restart Vite.</p>
-        <pre>VITE_MS_CLIENT_ID=your-client-id-here</pre>
-      </div>
-    </main>
-  );
-}
+function SignInScreen({
+  error,
+  busy,
+  msalAvailable,
+  onSignIn,
+  onUseToken
+}: {
+  error: string | null;
+  busy: boolean;
+  msalAvailable: boolean;
+  onSignIn: () => void;
+  onUseToken: (token: string) => void;
+}) {
+  const [token, setToken] = useState("");
 
-function SignInScreen({ error, busy, onSignIn }: { error: string | null; busy: boolean; onSignIn: () => void }) {
   return (
     <main className="entry-screen">
       <section className="signin-layout">
@@ -264,13 +301,31 @@ function SignInScreen({ error, busy, onSignIn }: { error: string | null; busy: b
         <div className="entry-card signin-card">
           <span className="eyebrow">Private by design</span>
           <h2>Your workday, in one place</h2>
-          <p>Daybook runs in your browser and requests delegated access to your own Microsoft 365 activity.</p>
+          <p>Use a temporary Graph Explorer access token. It stays in memory and is cleared when you refresh or close this tab.</p>
           {error && <div className="compact-error" role="alert">{error}</div>}
-          <button className="microsoft-button" type="button" onClick={onSignIn} disabled={busy}>
-            <span className="microsoft-logo" aria-hidden="true"><i /><i /><i /><i /></span>
-            {busy ? "Opening Microsoft…" : "Sign in with Microsoft"}
-          </button>
-          <small>No backend, database, or application permissions.</small>
+          <form className="token-form" onSubmit={(event) => { event.preventDefault(); onUseToken(token); }}>
+            <label htmlFor="graph-token">Graph Explorer access token</label>
+            <input
+              id="graph-token"
+              type="password"
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="eyJ0eXAiOiJKV1QiLCJ..."
+            />
+            <button className="primary-button token-button" type="submit">Use access token</button>
+          </form>
+          {msalAvailable && (
+            <>
+              <div className="auth-divider"><span>or</span></div>
+              <button className="microsoft-button" type="button" onClick={onSignIn} disabled={busy}>
+                <span className="microsoft-logo" aria-hidden="true"><i /><i /><i /><i /></span>
+                {busy ? "Opening Microsoft…" : "Sign in with Microsoft"}
+              </button>
+            </>
+          )}
+          <small>Tokens are not saved or sent anywhere except Microsoft Graph.</small>
         </div>
       </section>
     </main>
