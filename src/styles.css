@@ -43,6 +43,7 @@ h1, h2, h3 { font-family: "Avenir Next", Inter, "Segoe UI", sans-serif; letter-s
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
 .brand-lockup { display: flex; align-items: center; gap: 12px; }
 .brand-lockup h1 { margin: 0; font-size: 20px; }
+.demo-pill { display: inline-flex; margin-left: 7px; padding: 3px 7px; border-radius: 999px; color: #5c3f86; background: #eee3f6; font-family: Inter, sans-serif; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; vertical-align: 3px; }
 .brand-lockup p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .brand-mark { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; font-family: "Avenir Next", Inter, sans-serif; font-weight: 800; color: white; background: linear-gradient(145deg, #7377dd, #44479e); box-shadow: 0 8px 20px rgba(91, 95, 199, 0.28); }
 .brand-mark.large { width: 54px; height: 54px; border-radius: 16px; font-size: 22px; margin-bottom: 24px; }
@@ -255,6 +256,8 @@ h1, h2, h3 { font-family: "Avenir Next", Inter, "Segoe UI", sans-serif; letter-s
 .auth-divider + .microsoft-button { margin-top: 19px; }
 .microsoft-button:hover:not(:disabled) { border-color: #bfc4cd; box-shadow: 0 8px 20px rgba(31, 40, 58, 0.08); transform: translateY(-1px); }
 .microsoft-button:disabled { opacity: 0.6; cursor: wait; }
+.demo-button { width: 100%; min-height: 46px; margin-top: 18px; border: 1px solid #d8d5e6; border-radius: 12px; color: #4e4f80; background: linear-gradient(135deg, #f7f5fc, #eef1fb); font-weight: 800; cursor: pointer; transition: 150ms ease; }
+.demo-button:hover { border-color: #c6c1dc; box-shadow: 0 8px 20px rgba(48, 50, 105, 0.09); transform: translateY(-1px); }
 .microsoft-logo { width: 18px; height: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
 .microsoft-logo i:nth-child(1) { background: #f35325; }
 .microsoft-logo i:nth-child(2) { background: #81bc06; }

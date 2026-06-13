@@ -23,6 +23,7 @@ import {
   mergeCopilotRecords
 } from "./copilot/daybook";
 import { CopilotBrief, CopilotExtensionStatus, CopilotProgress } from "./copilot/types";
+import { createDemoBrief, createDemoData, DEMO_DATE } from "./demo/data";
 import { getErrorMessage } from "./graph/errors";
 import { fetchDaybook } from "./graph/fetchDaybook";
 import { DaybookData, DaybookItem } from "./types/daybook";
@@ -36,7 +37,8 @@ const copilotUrl = "https://m365.cloud.microsoft/chat";
 export default function App() {
   const { instance, accounts, inProgress } = useMsal();
   const account = instance.getActiveAccount() ?? accounts[0];
-  const [date, setDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [demoMode, setDemoMode] = useState(() => new URLSearchParams(window.location.search).get("demo") === "1");
+  const [date, setDate] = useState(() => demoMode ? DEMO_DATE : dayjs().format("YYYY-MM-DD"));
   const [graphData, setGraphData] = useState<DaybookData | null>(null);
   const [data, setData] = useState<DaybookData | null>(null);
   const [selected, setSelected] = useState<DaybookItem>();
@@ -54,7 +56,7 @@ export default function App() {
   const [copilotBusy, setCopilotBusy] = useState(false);
   const [brief, setBrief] = useState<CopilotBrief>();
   const [disclosureAccepted, setDisclosureAccepted] = useState(
-    () => window.localStorage.getItem(COPILOT_DISCLOSURE_KEY) === "accepted"
+    () => demoMode || window.localStorage.getItem(COPILOT_DISCLOSURE_KEY) === "accepted"
   );
   const requestId = useRef(0);
 
@@ -72,6 +74,17 @@ export default function App() {
   );
 
   const load = useCallback(async () => {
+    if (demoMode) {
+      const demoData = createDemoData(date);
+      setGraphData(demoData);
+      setData(demoData);
+      setBrief(createDemoBrief(date));
+      setExtensionStatus({ installed: true });
+      setError(null);
+      setCopilotError(null);
+      setSelected((current) => current ? demoData.items.find((item) => item.id === current.id) : demoData.items[2]);
+      return;
+    }
     if (!graph) return;
     const currentRequest = ++requestId.current;
     setLoading(true);
@@ -105,7 +118,7 @@ export default function App() {
     } finally {
       if (currentRequest === requestId.current) setLoading(false);
     }
-  }, [date, graph]);
+  }, [date, demoMode, graph]);
 
   useEffect(() => {
     void load();
@@ -135,6 +148,15 @@ export default function App() {
 
   async function signOut() {
     setError(null);
+    if (demoMode) {
+      window.history.replaceState({}, "", window.location.pathname);
+      setDemoMode(false);
+      setGraphData(null);
+      setData(null);
+      setBrief(undefined);
+      setSelected(undefined);
+      return;
+    }
     if (manualToken) {
       requestId.current += 1;
       window.sessionStorage.removeItem(MANUAL_TOKEN_KEY);
@@ -154,6 +176,11 @@ export default function App() {
   }
 
   async function syncCopilot() {
+    if (demoMode) {
+      setCopilotProgress({ stage: "complete", message: "Demo Copilot history is already synchronized" });
+      window.setTimeout(() => setCopilotProgress(undefined), 1_200);
+      return;
+    }
     setCopilotBusy(true);
     setCopilotError(null);
     setCopilotProgress({ stage: "opening", message: "Opening Microsoft 365 Copilot" });
@@ -172,6 +199,12 @@ export default function App() {
 
   async function exportToCopilot() {
     if (!data) return;
+    if (demoMode) {
+      setBrief(createDemoBrief(date));
+      setCopilotProgress({ stage: "complete", message: "Demo brief generated locally" });
+      window.setTimeout(() => setCopilotProgress(undefined), 1_200);
+      return;
+    }
     const exportId = crypto.randomUUID();
     const filename = `daybook-${date}.md`;
     const markdown = buildDaybookMarkdown(date, data.items, exportId);
@@ -198,6 +231,11 @@ export default function App() {
   }
 
   async function clearCopilot() {
+    if (demoMode) {
+      setData(createDemoData(date));
+      setBrief(undefined);
+      return;
+    }
     setCopilotError(null);
     try {
       await clearCopilotHistory();
@@ -222,12 +260,19 @@ export default function App() {
     }
   }
 
-  if (!account && !manualToken) {
-    return <SignInScreen error={error} busy={signingIn || inProgress !== InteractionStatus.None} msalAvailable={hasMsalClientId} onSignIn={() => void signIn()} onUseToken={useAccessToken} />;
+  function startDemo() {
+    window.history.replaceState({}, "", `${window.location.pathname}?demo=1`);
+    setDate(DEMO_DATE);
+    setDemoMode(true);
+    setDisclosureAccepted(true);
   }
 
-  const displayName = account?.name || manualIdentity?.name || "Microsoft account";
-  const username = account?.username || manualIdentity?.username || "";
+  if (!account && !manualToken && !demoMode) {
+    return <SignInScreen error={error} busy={signingIn || inProgress !== InteractionStatus.None} msalAvailable={hasMsalClientId} onSignIn={() => void signIn()} onUseToken={useAccessToken} onTryDemo={startDemo} />;
+  }
+
+  const displayName = demoMode ? "Alex Morgan" : account?.name || manualIdentity?.name || "Microsoft account";
+  const username = demoMode ? "Demo workspace · sample data" : account?.username || manualIdentity?.username || "";
   const allItems = data?.items ?? [];
   const teamItems = allItems.filter((item) => item.source === "Teams");
   const chats = unique(teamItems.map((item) => item.conversationTitle).filter(isString));
@@ -248,7 +293,7 @@ export default function App() {
     <main className="app-shell">
       <section className="main-panel">
         <header className="topbar">
-          <div className="brand-lockup"><div className="brand-mark" aria-hidden="true">D</div><div><h1>Daybook</h1><p>Microsoft 365 activity, led by Teams and Copilot</p></div></div>
+          <div className="brand-lockup"><div className="brand-mark" aria-hidden="true">D</div><div><h1>Daybook {demoMode && <span className="demo-pill">Demo</span>}</h1><p>Microsoft 365 activity, led by Teams and Copilot</p></div></div>
           <div className="account-menu"><div className="account-copy"><strong>{displayName}</strong><span>{username}</span></div><button className="icon-button" type="button" onClick={() => void signOut()} aria-label="Sign out"><span aria-hidden="true">↗</span></button></div>
         </header>
 
@@ -332,9 +377,9 @@ function TimelineSkeleton() {
   return <div className="timeline-skeleton" aria-label="Loading timeline">{[0, 1, 2].map((item) => <div className="skeleton-row" key={item}><span /><div><i /><i /></div></div>)}</div>;
 }
 
-function SignInScreen({ error, busy, msalAvailable, onSignIn, onUseToken }: { error: string | null; busy: boolean; msalAvailable: boolean; onSignIn: () => void; onUseToken: (token: string) => void }) {
+function SignInScreen({ error, busy, msalAvailable, onSignIn, onUseToken, onTryDemo }: { error: string | null; busy: boolean; msalAvailable: boolean; onSignIn: () => void; onUseToken: (token: string) => void; onTryDemo: () => void }) {
   const [token, setToken] = useState("");
   return (
-    <main className="entry-screen"><section className="signin-layout"><div className="signin-copy"><div className="brand-lockup light"><div className="brand-mark" aria-hidden="true">D</div><strong>Daybook</strong></div><span className="eyebrow">Teams-first work history</span><h1>See the shape of your day.</h1><p>Bring Teams and Copilot conversations into one chronological view, with meetings, email, and files as supporting context.</p><ul><li><span>T</span> Messages from active Teams chats</li><li><span>C</span> Local Copilot history through the extension</li><li><span>24</span> Activity limited to the day you choose</li></ul></div><div className="entry-card signin-card"><span className="eyebrow">Private by design</span><h2>Your workday, in one place</h2><p>Use a temporary Graph Explorer access token. It remains in this browser tab session and is cleared when you sign out or close the session.</p>{error && <div className="compact-error" role="alert">{error}</div>}<form className="token-form" onSubmit={(event) => { event.preventDefault(); onUseToken(token); }}><label htmlFor="graph-token">Graph Explorer access token</label><input id="graph-token" type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" spellCheck={false} placeholder="eyJ0eXAiOiJKV1QiLCJ..." /><button className="primary-button token-button" type="submit">Use access token</button></form>{msalAvailable && <><div className="auth-divider"><span>or</span></div><button className="microsoft-button" type="button" onClick={onSignIn} disabled={busy}><span className="microsoft-logo" aria-hidden="true"><i /><i /><i /><i /></span>{busy ? "Opening Microsoft…" : "Sign in with Microsoft"}</button></>}<small>Tokens are sent only to Microsoft Graph and are never shared with the extension.</small></div></section></main>
+    <main className="entry-screen"><section className="signin-layout"><div className="signin-copy"><div className="brand-lockup light"><div className="brand-mark" aria-hidden="true">D</div><strong>Daybook</strong></div><span className="eyebrow">Teams-first work history</span><h1>See the shape of your day.</h1><p>Bring Teams and Copilot conversations into one chronological view, with meetings, email, and files as supporting context.</p><ul><li><span>T</span> Messages from active Teams chats</li><li><span>C</span> Local Copilot history through the extension</li><li><span>24</span> Activity limited to the day you choose</li></ul></div><div className="entry-card signin-card"><span className="eyebrow">Private by design</span><h2>Your workday, in one place</h2><p>Use a temporary Graph Explorer access token. It remains in this browser tab session and is cleared when you sign out or close the session.</p>{error && <div className="compact-error" role="alert">{error}</div>}<form className="token-form" onSubmit={(event) => { event.preventDefault(); onUseToken(token); }}><label htmlFor="graph-token">Graph Explorer access token</label><input id="graph-token" type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" spellCheck={false} placeholder="eyJ0eXAiOiJKV1QiLCJ..." /><button className="primary-button token-button" type="submit">Use access token</button></form>{msalAvailable && <><div className="auth-divider"><span>or</span></div><button className="microsoft-button" type="button" onClick={onSignIn} disabled={busy}><span className="microsoft-logo" aria-hidden="true"><i /><i /><i /><i /></span>{busy ? "Opening Microsoft…" : "Sign in with Microsoft"}</button></>}<div className="auth-divider"><span>preview</span></div><button className="demo-button" type="button" onClick={onTryDemo}>Try demo with sample data</button><small>Tokens are sent only to Microsoft Graph and are never shared with the extension.</small></div></section></main>
   );
 }

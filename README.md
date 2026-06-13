@@ -15,6 +15,10 @@ cp .env.example .env.local
 npm run dev
 ```
 
+Use **Try demo with sample data** on the sign-in screen, or open `?demo=1`,
+to preview the complete interface without Microsoft credentials. Demo mode is
+local-only and never calls Graph or the Copilot extension.
+
 ## Use a Graph Explorer token
 
 If you cannot register an Entra application, copy the access token from Graph
