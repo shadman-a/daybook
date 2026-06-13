@@ -20,6 +20,9 @@ export type GraphChat = {
   topic?: string;
   chatType?: string;
   lastUpdatedDateTime?: string;
+  lastMessagePreview?: {
+    createdDateTime?: string;
+  };
   webUrl?: string;
 };
 

@@ -29,13 +29,6 @@ export async function fetchDaybook(graph: Client, date: string) {
     });
   }
 
-  if (teams.truncatedChatList || teams.truncatedMessageChatCount > 0) {
-    warnings.unshift({
-      source: "Teams",
-      message: "The Teams result was unusually large, so the displayed timeline may be incomplete."
-    });
-  }
-
   if (mailResult.value.failedFolders.length > 0) {
     warnings.push({
       source: "Mail",
