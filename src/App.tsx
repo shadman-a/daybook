@@ -82,7 +82,7 @@ export default function App() {
       setExtensionStatus({ installed: true });
       setError(null);
       setCopilotError(null);
-      setSelected((current) => current ? demoData.items.find((item) => item.id === current.id) : demoData.items[2]);
+      setSelected((current) => current ? demoData.items.find((item) => item.id === current.id) : undefined);
       return;
     }
     if (!graph) return;
@@ -201,6 +201,7 @@ export default function App() {
     if (!data) return;
     if (demoMode) {
       setBrief(createDemoBrief(date));
+      setSelected(undefined);
       setCopilotProgress({ stage: "complete", message: "Demo brief generated locally" });
       window.setTimeout(() => setCopilotProgress(undefined), 1_200);
       return;
@@ -216,6 +217,7 @@ export default function App() {
     try {
       const nextBrief = await exportDayToCopilot({ date, exportId, filename, markdown, fingerprint }, setCopilotProgress);
       setBrief(nextBrief);
+      setSelected(undefined);
     } catch (exportError) {
       setCopilotError(`${getErrorMessage(exportError, "Copilot export did not complete.")} Download the Markdown file and attach it manually.`);
     } finally {
@@ -331,6 +333,7 @@ export default function App() {
           onCancel={() => void cancelCopilotOperation()}
           onDownload={downloadMarkdown}
           onClear={() => void clearCopilot()}
+          onViewBrief={() => setSelected(undefined)}
         />
 
         <section className="timeline-section" aria-labelledby="timeline-title">
@@ -343,7 +346,7 @@ export default function App() {
           {loading && !data ? <TimelineSkeleton /> : error && !data ? null : <Timeline items={filteredItems} selectedId={selected?.id} onSelect={setSelected} filter={filter} />}
         </section>
       </section>
-      <DetailDrawer item={selected} onClose={() => setSelected(undefined)} copilotUrl={copilotUrl} />
+      <DetailDrawer item={selected} brief={brief} onClose={() => setSelected(undefined)} copilotUrl={copilotUrl} />
     </main>
   );
 }

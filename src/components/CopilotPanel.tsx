@@ -1,4 +1,3 @@
-import dayjs from "dayjs";
 import { CopilotBrief, CopilotExtensionStatus, CopilotProgress } from "../copilot/types";
 
 export function CopilotPanel({
@@ -13,7 +12,8 @@ export function CopilotPanel({
   onExport,
   onCancel,
   onDownload,
-  onClear
+  onClear,
+  onViewBrief
 }: {
   status: CopilotExtensionStatus;
   progress?: CopilotProgress;
@@ -27,6 +27,7 @@ export function CopilotPanel({
   onCancel: () => void;
   onDownload: () => void;
   onClear: () => void;
+  onViewBrief: () => void;
 }) {
   return (
     <section className="copilot-panel" aria-labelledby="copilot-heading">
@@ -35,17 +36,13 @@ export function CopilotPanel({
           <span className="copilot-mark" aria-hidden="true">C</span>
           <div>
             <span className="eyebrow">Microsoft 365 Copilot</span>
-            <h2 id="copilot-heading">Copilot sync and daily brief</h2>
+            <h2 id="copilot-heading">Copilot tools</h2>
           </div>
         </div>
         <span className={`extension-status ${status.installed ? "connected" : "missing"}`}>
           {status.installed ? `Extension connected${status.version ? ` · v${status.version}` : ""}` : "Extension not detected"}
         </span>
       </div>
-
-      <p className="copilot-description">
-        Sync signed-in Copilot conversations for this date, or send the complete day to a new Copilot chat for a generated brief.
-      </p>
 
       {!disclosureAccepted && (
         <div className="copilot-disclosure">
@@ -71,59 +68,8 @@ export function CopilotPanel({
         {busy && <button className="text-button danger" type="button" onClick={onCancel}>Cancel</button>}
         <button className="text-button" type="button" onClick={onDownload} disabled={!hasData}>Download Markdown</button>
         <button className="text-button" type="button" onClick={onClear} disabled={!status.installed || busy}>Clear Copilot data</button>
+        {brief && <button className="text-button view-brief-button" type="button" onClick={onViewBrief}>View daily brief →</button>}
       </div>
-
-      {brief && (
-        <article className="brief-panel">
-          <div className="brief-heading">
-            <div><span className="eyebrow">Generated brief</span><h3>Daily summary</h3></div>
-            <span>{dayjs(brief.createdAt).format("MMM D, h:mm A")}</span>
-          </div>
-          <div className="brief-content">{renderMarkdown(brief.markdown)}</div>
-          {brief.conversationUrl && <a href={brief.conversationUrl} target="_blank" rel="noreferrer">Open generated Copilot chat ↗</a>}
-        </article>
-      )}
     </section>
   );
-}
-
-function renderMarkdown(markdown: string) {
-  const nodes = [];
-  const lines = markdown.split("\n");
-
-  for (let index = 0; index < lines.length;) {
-    const value = lines[index].trim();
-    if (!value) {
-      index += 1;
-      continue;
-    }
-    if (value.startsWith("### ")) {
-      nodes.push(<h4 key={`heading-${index}`}>{value.slice(4)}</h4>);
-      index += 1;
-      continue;
-    }
-    if (value.startsWith("## ") || value.startsWith("# ")) {
-      nodes.push(<h3 key={`heading-${index}`}>{value.replace(/^#{1,2}\s+/, "")}</h3>);
-      index += 1;
-      continue;
-    }
-    if (/^[-*]\s+/.test(value)) {
-      const entries = [];
-      while (index < lines.length && /^[-*]\s+/.test(lines[index].trim())) {
-        entries.push(lines[index].trim().replace(/^[-*]\s+/, ""));
-        index += 1;
-      }
-      nodes.push(<ul key={`list-${index}`}>{entries.map((entry) => <li key={entry}>{entry}</li>)}</ul>);
-      continue;
-    }
-
-    const paragraph = [];
-    while (index < lines.length && lines[index].trim() && !/^(?:#{1,3}|[-*])\s+/.test(lines[index].trim())) {
-      paragraph.push(lines[index].trim());
-      index += 1;
-    }
-    nodes.push(<p key={`paragraph-${index}`}>{paragraph.join(" ")}</p>);
-  }
-
-  return nodes;
 }
