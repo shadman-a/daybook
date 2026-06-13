@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "check:extension": "node -e \"JSON.parse(require('fs').readFileSync('extension/manifest.json'))\" && node --check extension/background.js && node --check extension/daybook-bridge.js && node --check extension/copilot-content.js",
     "preview": "vite preview"
   },
   "dependencies": {

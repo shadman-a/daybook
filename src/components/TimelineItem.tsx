@@ -20,8 +20,8 @@ export function TimelineItem({
       onClick={() => onSelect(item)}
     >
       <div className="time-column">
-        <span>{dayjs(item.timestamp).format("h:mm")}</span>
-        <small>{dayjs(item.timestamp).format("A")}</small>
+        <span>{item.timestamp ? dayjs(item.timestamp).format("h:mm") : "—"}</span>
+        <small>{item.timestamp ? dayjs(item.timestamp).format("A") : "UNKNOWN"}</small>
       </div>
       <div className="timeline-marker"><i /></div>
       <div className="item-main">

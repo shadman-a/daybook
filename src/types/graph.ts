@@ -39,6 +39,14 @@ export type GraphChatMessage = {
   webUrl?: string;
 };
 
+export type GraphChatMember = {
+  id?: string;
+  displayName?: string;
+  email?: string;
+  userId?: string;
+  roles?: string[];
+};
+
 export type GraphEmailAddress = {
   name?: string;
   address?: string;

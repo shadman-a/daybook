@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Daybook Copilot Bridge",
+  "version": "0.2.0",
+  "description": "Synchronizes Microsoft 365 Copilot history with Daybook and exports daily briefs.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://m365.cloud.microsoft/*",
+    "https://m365copilot.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://shadman-a.github.io/daybook/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://shadman-a.github.io/daybook/*"
+      ],
+      "js": ["daybook-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://m365.cloud.microsoft/*",
+        "https://m365copilot.com/*"
+      ],
+      "js": ["copilot-content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Daybook Copilot Bridge"
+  }
+}

@@ -39,7 +39,7 @@ export function DetailDrawer({
         <SourceBadge source={item.source} />
         <h2>{item.title}</h2>
         <div className="drawer-time">
-          <strong>{dayjs(item.timestamp).format("dddd, MMMM D")}</strong>
+          <strong>{item.timestamp ? dayjs(item.timestamp).format("dddd, MMMM D") : item.date ? dayjs(item.date).format("dddd, MMMM D") : "Date unknown"}</strong>
           <span>{formatTimeRange(item)}</span>
         </div>
         {item.preview && <p className="drawer-preview">{item.preview}</p>}
@@ -67,6 +67,7 @@ export function DetailDrawer({
 }
 
 function formatTimeRange(item: DaybookItem): string {
+  if (!item.timestamp) return "Time unknown";
   const start = dayjs(item.timestamp).format("h:mm A");
   return item.endTimestamp ? `${start} – ${dayjs(item.endTimestamp).format("h:mm A")}` : start;
 }

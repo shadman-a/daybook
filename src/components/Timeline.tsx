@@ -24,7 +24,7 @@ export function Timeline({
 
   return (
     <div className="timeline">
-      {items.map((item) => (
+      {items.filter((item) => item.timestamp).map((item) => (
         <TimelineItem
           key={item.id}
           item={item}
@@ -32,6 +32,19 @@ export function Timeline({
           onSelect={onSelect}
         />
       ))}
+      {items.some((item) => !item.timestamp) && (
+        <div className="unknown-time-group">
+          <div className="unknown-time-heading"><span>Time unknown</span><small>Copilot did not expose an exact timestamp</small></div>
+          {items.filter((item) => !item.timestamp).map((item) => (
+            <TimelineItem
+              key={item.id}
+              item={item}
+              selected={selectedId === item.id}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

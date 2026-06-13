@@ -1,7 +1,11 @@
 import { Client } from "@microsoft/microsoft-graph-client";
-import { GraphChat, GraphChatMessage, GraphCollection } from "../types/graph";
+import { GraphChat, GraphChatMember, GraphChatMessage, GraphCollection } from "../types/graph";
 
-export type TeamsMessageWithChat = { chat: GraphChat; message: GraphChatMessage };
+export type TeamsMessageWithChat = {
+  chat: GraphChat;
+  message: GraphChatMessage;
+  members: GraphChatMember[];
+};
 
 export type TeamsFetchResult = {
   messages: TeamsMessageWithChat[];
@@ -11,6 +15,7 @@ export type TeamsFetchResult = {
 };
 
 const CHAT_BATCH_SIZE = 8;
+const memberCache = new Map<string, GraphChatMember[]>();
 
 export async function fetchTeamsMessagesForDay(
   graph: Client,
@@ -25,7 +30,7 @@ export async function fetchTeamsMessagesForDay(
   for (let index = 0; index < activeChats.length; index += CHAT_BATCH_SIZE) {
     const batch = activeChats.slice(index, index + CHAT_BATCH_SIZE);
     const settled = await Promise.allSettled(
-      batch.map((chat) => fetchChatMessagesForDay(graph, chat, startZ, endZ))
+      batch.map((chat) => fetchChatActivityForDay(graph, chat, startZ, endZ))
     );
 
     settled.forEach((result) => {
@@ -43,6 +48,20 @@ export async function fetchTeamsMessagesForDay(
     failedChatCount,
     failureReason
   };
+}
+
+async function fetchChatActivityForDay(
+  graph: Client,
+  chat: GraphChat,
+  startZ: string,
+  endZ: string
+): Promise<TeamsMessageWithChat[]> {
+  const [messages, members] = await Promise.all([
+    fetchChatMessagesForDay(graph, chat, startZ, endZ),
+    fetchChatMembers(graph, chat.id).catch(() => [])
+  ]);
+
+  return messages.map((message) => ({ chat, message, members }));
 }
 
 async function fetchActiveChats(graph: Client, startZ: string): Promise<GraphChat[]> {
@@ -76,8 +95,8 @@ async function fetchChatMessagesForDay(
   chat: GraphChat,
   startZ: string,
   endZ: string
-): Promise<TeamsMessageWithChat[]> {
-  const dayMessages: TeamsMessageWithChat[] = [];
+): Promise<GraphChatMessage[]> {
+  const dayMessages: GraphChatMessage[] = [];
   let response = await fetchFirstMessagePage(graph, chat.id, endZ);
 
   while (true) {
@@ -87,7 +106,7 @@ async function fetchChatMessagesForDay(
         const created = message.createdDateTime;
         return created !== undefined && created >= startZ && created < endZ;
       })
-      .map((message) => ({ chat, message })));
+    );
 
     const crossedStartOfDay = pageMessages.some((message) => (
       message.createdDateTime !== undefined && message.createdDateTime < startZ
@@ -97,6 +116,29 @@ async function fetchChatMessagesForDay(
     if (crossedStartOfDay || !nextLink) return dayMessages;
     response = await graph.api(nextLink).get() as GraphCollection<GraphChatMessage>;
   }
+}
+
+async function fetchChatMembers(graph: Client, chatId: string): Promise<GraphChatMember[]> {
+  const cached = memberCache.get(chatId);
+  if (cached) return cached;
+
+  const encodedChatId = encodeURIComponent(chatId);
+  let response: GraphCollection<GraphChatMember>;
+
+  try {
+    response = await graph.api(`/me/chats/${encodedChatId}/members`).get() as GraphCollection<GraphChatMember>;
+  } catch {
+    response = await graph.api(`/chats/${encodedChatId}/members`).get() as GraphCollection<GraphChatMember>;
+  }
+
+  const members = [...(response.value ?? [])];
+  while (response["@odata.nextLink"]) {
+    response = await graph.api(response["@odata.nextLink"]).get() as GraphCollection<GraphChatMember>;
+    members.push(...(response.value ?? []));
+  }
+
+  memberCache.set(chatId, members);
+  return members;
 }
 
 async function fetchFirstMessagePage(

@@ -38,17 +38,34 @@ function graphDateTime(value?: { dateTime?: string; timeZone?: string }): string
 }
 
 export function normalizeDaybook(args: NormalizeArgs): DaybookData {
-  const teamsItems: DaybookItem[] = args.teams.map(({ chat, message }) => {
+  const teamsItems: DaybookItem[] = args.teams.map(({ chat, message, members }) => {
     const sender = message.from?.user ?? message.from?.application ?? message.from?.device;
     const preview = stripHtml(message.body?.content);
+    const memberPeople = members.map((member) => ({
+      id: member.userId || member.id,
+      displayName: member.displayName,
+      email: member.email
+    }));
+    const people = uniquePeople([
+      { id: sender?.id, displayName: sender?.displayName },
+      ...memberPeople
+    ].filter(hasPerson));
+    const participantTitle = memberPeople
+      .map((person) => person.displayName || person.email)
+      .filter((name): name is string => Boolean(name))
+      .slice(0, 3)
+      .join(", ");
+    const conversationTitle = chat.topic || participantTitle || chat.chatType || "Teams chat";
 
     return {
       id: `teams-${chat.id}-${message.id}`,
       source: "Teams",
       timestamp: message.createdDateTime ?? "",
-      title: chat.topic || message.subject || sender?.displayName || chat.chatType || "Teams message",
+      title: chat.topic || message.subject || sender?.displayName || conversationTitle,
       preview: preview || (message.deletedDateTime ? "This message was deleted." : "Teams activity"),
-      people: [{ id: sender?.id, displayName: sender?.displayName }].filter(hasPerson),
+      people,
+      conversationId: chat.id,
+      conversationTitle,
       sourceUrl: message.webUrl || chat.webUrl,
       importance: message.importance,
       raw: { chat, message }
@@ -110,15 +127,26 @@ export function normalizeDaybook(args: NormalizeArgs): DaybookData {
 
   const items = [...teamsItems, ...meetingItems, ...emailItems, ...sentItems, ...fileItems]
     .filter((item) => item.timestamp)
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    .sort((a, b) => new Date(a.timestamp ?? "").getTime() - new Date(b.timestamp ?? "").getTime());
 
   return {
     date: args.date,
     items,
     teamsCount: teamsItems.length,
+    copilotCount: 0,
     meetingCount: meetingItems.length,
     emailCount: emailItems.length + sentItems.length,
     fileCount: fileItems.length,
     warnings: args.warnings
   };
+}
+
+function uniquePeople(people: DaybookPerson[]): DaybookPerson[] {
+  const seen = new Set<string>();
+  return people.filter((person) => {
+    const key = person.id || person.email || person.displayName;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
