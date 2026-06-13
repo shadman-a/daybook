@@ -7,6 +7,7 @@ export type TeamsFetchResult = {
   messages: TeamsMessageWithChat[];
   activeChatCount: number;
   failedChatCount: number;
+  failureReason?: string;
 };
 
 const CHAT_BATCH_SIZE = 8;
@@ -19,6 +20,7 @@ export async function fetchTeamsMessagesForDay(
   const activeChats = await fetchActiveChats(graph, startZ);
   const messages: TeamsMessageWithChat[] = [];
   let failedChatCount = 0;
+  let failureReason: string | undefined;
 
   for (let index = 0; index < activeChats.length; index += CHAT_BATCH_SIZE) {
     const batch = activeChats.slice(index, index + CHAT_BATCH_SIZE);
@@ -28,14 +30,18 @@ export async function fetchTeamsMessagesForDay(
 
     settled.forEach((result) => {
       if (result.status === "fulfilled") messages.push(...result.value);
-      else failedChatCount += 1;
+      else {
+        failedChatCount += 1;
+        failureReason ??= getGraphFailureReason(result.reason);
+      }
     });
   }
 
   return {
     messages,
     activeChatCount: activeChats.length,
-    failedChatCount
+    failedChatCount,
+    failureReason
   };
 }
 
@@ -72,12 +78,7 @@ async function fetchChatMessagesForDay(
   endZ: string
 ): Promise<TeamsMessageWithChat[]> {
   const dayMessages: TeamsMessageWithChat[] = [];
-  let response = await graph.api(`/me/chats/${encodeURIComponent(chat.id)}/messages`)
-    .select("id,createdDateTime,lastModifiedDateTime,deletedDateTime,messageType,importance,subject,body,from,webUrl")
-    .orderby("createdDateTime desc")
-    .filter(`createdDateTime lt ${endZ}`)
-    .top(50)
-    .get() as GraphCollection<GraphChatMessage>;
+  let response = await fetchFirstMessagePage(graph, chat.id, endZ);
 
   while (true) {
     const pageMessages = response.value ?? [];
@@ -98,6 +99,45 @@ async function fetchChatMessagesForDay(
   }
 }
 
+async function fetchFirstMessagePage(
+  graph: Client,
+  chatId: string,
+  endZ: string
+): Promise<GraphCollection<GraphChatMessage>> {
+  const encodedChatId = encodeURIComponent(chatId);
+
+  try {
+    return await fetchDateBoundedMessagePage(graph, `/me/chats/${encodedChatId}/messages`, endZ);
+  } catch {
+    // Some Graph deployments expose the collection only through the canonical
+    // chat route even though individual messages support the /me route.
+    return fetchDateBoundedMessagePage(graph, `/chats/${encodedChatId}/messages`, endZ);
+  }
+}
+
+async function fetchDateBoundedMessagePage(
+  graph: Client,
+  path: string,
+  endZ: string
+): Promise<GraphCollection<GraphChatMessage>> {
+  return graph.api(path)
+    .orderby("createdDateTime desc")
+    .filter(`createdDateTime lt ${endZ}`)
+    .top(50)
+    .get() as Promise<GraphCollection<GraphChatMessage>>;
+}
+
 function getChatActivityTime(chat: GraphChat): string {
   return chat.lastMessagePreview?.createdDateTime ?? chat.lastUpdatedDateTime ?? "";
+}
+
+function getGraphFailureReason(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = error as { code?: unknown; message?: unknown; statusCode?: unknown };
+  const parts = [
+    typeof candidate.code === "string" ? candidate.code : undefined,
+    typeof candidate.message === "string" ? candidate.message : undefined,
+    typeof candidate.statusCode === "number" ? `HTTP ${candidate.statusCode}` : undefined
+  ].filter((part): part is string => Boolean(part));
+  return parts.length ? parts.join(": ") : undefined;
 }

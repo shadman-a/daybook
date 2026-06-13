@@ -25,7 +25,10 @@ export async function fetchDaybook(graph: Client, date: string) {
   if (teams.failedChatCount > 0) {
     warnings.unshift({
       source: "Teams",
-      message: `${teams.failedChatCount} of ${teams.activeChatCount} active chats could not be read.`
+      message: [
+        `${teams.failedChatCount} of ${teams.activeChatCount} active chats could not be read.`,
+        teams.failureReason
+      ].filter(Boolean).join(" ")
     });
   }
 
